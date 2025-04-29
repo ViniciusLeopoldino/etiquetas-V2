@@ -131,7 +131,7 @@ export default function HomePage() {
   return (
     <div className="container">
       <img src="/logo.png" alt="Logo" className="logo" />
-      <h1>Impressão de Etiquetas</h1>
+      <h1>Impressão de Etiquetas (DUN)</h1>
       <p>Importar CSV</p>
       <input title="Import de Arquivo CSV" type="file" accept=".csv" onChange={handleFileUpload} className="fileInput" />
       <button title="Botão para gerar etiquetas" type="button" onClick={generatePDF} disabled={loading} className="button">
