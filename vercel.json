@@ -1,11 +1,17 @@
 {
-    "build": {
-      "env": {
-        "NODE_ENV": "production"
-      },
-      "commands": {
-        "preinstall": "apt-get update && apt-get install -y libcairo2-dev libjpeg-dev libpango1.0-dev libgif-dev librsvg2-dev build-essential g++",
-        "install": "npm install"
+  "version": 2,
+  "builds": [
+    {
+      "src": "*.js",
+      "use": "@vercel/node",
+      "config": {
+        "includeFiles": ["**/*"]
       }
     }
+  ],
+  "build": {
+    "env": {
+      "NODE_ENV": "production"
+    }
   }
+}
