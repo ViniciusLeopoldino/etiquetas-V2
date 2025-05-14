@@ -12,6 +12,7 @@ interface CsvRow {
   QTD_VOLUME: string;
   QTD_PECAS: string;
   VALIDADE?: string;
+  QTD_ETIQUETAS?: string;
 }
 
 export default function HomePage() {
@@ -66,58 +67,55 @@ export default function HomePage() {
     };
 
     const generateBarcodes = async () => {
-      for (let index = 0; index < csvData.length; index++) {
-        const row = csvData[index];
+  let isFirstPage = true;
 
-        if (!row.DUN || !row.LOTE) {
-          console.error(`Linha ${index + 1} não contém valores necessários`);
-          continue;
-        }
+  for (let index = 0; index < csvData.length; index++) {
+    const row = csvData[index];
 
-        if (index > 0) {
-          doc.addPage();
-        }
+    if (!row.DUN || !row.LOTE) {
+      console.error(`Linha ${index + 1} não contém valores necessários`);
+      continue;
+    }
 
-        try {
-          /////////////////Alterar fonte e tipo de texto/////////////////
-          //Tipos de Texto = Normal(padrão), Bold(negrito), Italic(itálico) e BoldItalic(negrito e itálico)
-          //Tipos de fonte = Helvetica, Times e Courier
-          doc.setFont("Helvetica", "Bold");
-          doc.setFontSize(11);
+    // Converte a quantidade de etiquetas para número e usa 1 como padrão
+    const qtdEtiquetas = Math.max(parseInt(row.QTD_ETIQUETAS || '1'), 1);
 
-          // Código de barras inicial (da coluna DUN)
-          const dunBarcode = await generateBarcodeImage(row.DUN);
-          doc.addImage(dunBarcode, 'PNG', 0.1, 0.1, 9.8, 1.8);
-          doc.text(`DUN:`, 0.1, 1.8); // Valor do código
-
-          /////////////////Alterar fonte e tipo de texto/////////////////
-          //Tipos de Texto = Normal(padrão), Bold(negrito), Italic(itálico) e BoldItalic(negrito e itálico)
-          //Tipos de fonte = Helvetica, Times e Courier
-          doc.setFont("Helvetica", "Bold");
-          doc.setFontSize(11);
-
-          // Adiciona descrição, volume e peças
-          const descricaoTexto = doc.splitTextToSize(`Descrição: ${row.DESCRICAO}`, 9.8);
-          doc.text(descricaoTexto, 0.2, 2.8);
-          // doc.text(`Qtd Volume: ${row.QTD_VOLUME}`, 0.2, 4.1);
-          doc.text(`Qtd Peças: ${row.QTD_PECAS}`, 0.2, 4.7);
-
-          // Adiciona validade (se existir)
-          const validade = row.VALIDADE ? row.VALIDADE : new Date().toLocaleDateString();
-          doc.text(`Data de Validade: ${validade}`, 9.8, 4.7, { align: 'right' });
-
-          // Código de barras final (da coluna LOTE)
-          const loteBarcode = await generateBarcodeImage(row.LOTE);
-          doc.addImage(loteBarcode, 'PNG', 0.1, 5.2, 9.8, 1.8);
-          doc.text(`LOTE:`, 0.1, 6.9); // Valor do lote
-
-        } catch (error) {
-          console.error("Erro ao gerar código de barras:", error);
-        }
+    for (let i = 0; i < qtdEtiquetas; i++) {
+      if (!isFirstPage) {
+        doc.addPage();
       }
+      isFirstPage = false;
 
-      doc.save("Etiquetas.pdf");
-    };
+      try {
+        doc.setFont("Helvetica", "Bold");
+        doc.setFontSize(11);
+
+        const dunBarcode = await generateBarcodeImage(row.DUN);
+        doc.addImage(dunBarcode, 'PNG', 0.1, 0.1, 9.8, 1.8);
+        doc.text(`DUN:`, 0.1, 1.8);
+
+        doc.setFont("Helvetica", "Bold");
+        doc.setFontSize(11);
+
+        const descricaoTexto = doc.splitTextToSize(`Descrição: ${row.DESCRICAO}`, 9.8);
+        doc.text(descricaoTexto, 0.2, 2.8);
+        doc.text(`Qtd Peças: ${row.QTD_PECAS}`, 0.2, 4.7);
+
+        const validade = row.VALIDADE ? row.VALIDADE : new Date().toLocaleDateString();
+        doc.text(`Data de Validade: ${validade}`, 9.8, 4.7, { align: 'right' });
+
+        const loteBarcode = await generateBarcodeImage(row.LOTE);
+        doc.addImage(loteBarcode, 'PNG', 0.1, 5.2, 9.8, 1.8);
+        doc.text(`LOTE:`, 0.1, 6.9);
+      } catch (error) {
+        console.error("Erro ao gerar código de barras:", error);
+      }
+    }
+  }
+
+  doc.save("Etiquetas.pdf");
+};
+
 
     try {
       await generateBarcodes();
