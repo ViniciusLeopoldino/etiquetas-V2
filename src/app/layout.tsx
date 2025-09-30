@@ -1,5 +1,9 @@
 import type { Metadata } from "next";
-import React from 'react';
+import { Inter } from "next/font/google"; // Importa a fonte do Google
+import "./globals.css"; // Importa o CSS do Tailwind
+
+// Configura a fonte Inter
+const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "Gerador de Etiquetas",
@@ -13,24 +17,8 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pt-BR">
-      <head>
-        <meta charSet="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>{String(metadata.title)}</title>
-        <meta name="description" content={String(metadata.description)} />
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet" />
-        <script src="https://cdn.tailwindcss.com"></script>
-        <style>{`
-          body {
-            font-family: 'Inter', sans-serif;
-            -webkit-font-smoothing: antialiased;
-            -moz-osx-font-smoothing: grayscale;
-          }
-        `}</style>
-      </head>
-      <body>
+      {/* A classe da fonte é aplicada diretamente no body */}
+      <body className={inter.className}>
         {children}
       </body>
     </html>
