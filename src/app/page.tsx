@@ -11,16 +11,20 @@ declare global {
   }
 }
 
-// Interface para os dados do CSV (com o campo DESCRICAO)
+// Interface para os dados do CSV
 interface CsvRow {
   NOME_CLIENTE: string;
   CODIGO: string;
   EAN: string;
   DESCRICAO: string;
-  LOTE: string;
-  VENCIMENTO: string;
+  LOTE?: string;
+  VENCIMENTO?: string;
+  QUANTIDADE?: string; // Agora é usado em AMBOS os modos
   QTD_ETIQUETAS?: string;
 }
+
+// Define os tipos de etiqueta
+type LabelType = 'comLote' | 'semLote';
 
 export default function HomePage() {
   const [csvData, setCsvData] = useState<CsvRow[]>([]);
@@ -28,6 +32,7 @@ export default function HomePage() {
   const [fileName, setFileName] = useState('');
   const [error, setError] = useState('');
   const [scriptsLoaded, setScriptsLoaded] = useState(false);
+  const [labelType, setLabelType] = useState<LabelType>('comLote'); // Estado para o tipo
 
   useEffect(() => {
     const loadScript = (src: string) => {
@@ -53,6 +58,14 @@ export default function HomePage() {
     });
   }, []);
 
+  // Handler para limpar o CSV ao trocar o tipo de etiqueta
+  const handleLabelTypeChange = (newType: LabelType) => {
+    setLabelType(newType);
+    setCsvData([]);
+    setFileName('');
+    setError('');
+  };
+
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
@@ -66,20 +79,52 @@ export default function HomePage() {
       window.Papa.parse(file, {
         header: true,
         skipEmptyLines: true,
-        delimiter: ";", // Usa ponto e vírgula como separador
+        delimiter: ";",
         complete: (results: any) => {
-          const requiredColumns = ['NOME_CLIENTE', 'CODIGO', 'EAN', 'DESCRICAO', 'LOTE', 'VENCIMENTO'];
+          
+          // === INÍCIO DA ALTERAÇÃO (VALIDAÇÃO) ===
+          // Colunas básicas + Quantidade são sempre necessárias
+          let requiredColumns = ['NOME_CLIENTE', 'CODIGO', 'EAN', 'DESCRICAO', 'QUANTIDADE'];
+          
+          // Adiciona colunas específicas do tipo "Com Lote"
+          if (labelType === 'comLote') {
+            requiredColumns.push('LOTE', 'VENCIMENTO');
+          }
+          // === FIM DA ALTERAÇÃO (VALIDAÇÃO) ===
+
           const fileColumns = results.meta.fields || [];
           const missingColumns = requiredColumns.filter(col => !fileColumns.includes(col));
 
           if (missingColumns.length > 0) {
-            setError(`O arquivo CSV não contém as seguintes colunas obrigatórias: ${missingColumns.join(', ')}`);
+            setError(`O arquivo CSV não contém as seguintes colunas obrigatórias para este tipo de etiqueta: ${missingColumns.join(', ')}`);
             setCsvData([]);
             setFileName('');
             return;
           }
 
-          const filteredData = results.data.filter((row: CsvRow) => row.NOME_CLIENTE && row.CODIGO && row.EAN && row.DESCRICAO && row.LOTE && row.VENCIMENTO);
+          // === INÍCIO DA ALTERAÇÃO (FILTRAGEM) ===
+          const filteredData = results.data.filter((row: CsvRow) => {
+            // Quantidade agora é obrigatória em ambos
+            const commonValid = row.NOME_CLIENTE && row.CODIGO && row.EAN && row.DESCRICAO && row.QUANTIDADE;
+            
+            if (labelType === 'comLote') {
+              // Modo "Com Lote" também precisa de Lote e Vencimento
+              return commonValid && row.LOTE && row.VENCIMENTO;
+            } else {
+              // Modo "Sem Lote" só precisa dos comuns
+              return commonValid;
+            }
+          });
+          // === FIM DA ALTERAÇÃO (FILTRAGEM) ===
+
+
+          if (filteredData.length === 0) {
+             setError('Nenhuma linha válida encontrada no CSV para o tipo de etiqueta selecionado. Verifique se as colunas obrigatórias estão preenchidas.');
+             setCsvData([]);
+             setFileName('');
+             return;
+          }
+
           setCsvData(filteredData);
         },
         error: (err: any) => {
@@ -90,10 +135,10 @@ export default function HomePage() {
   };
 
   const downloadTemplate = () => {
-    // Adicionado \uFEFF (BOM) para compatibilidade com Excel e usando ; como separador
-    const csvContent = "\uFEFFNOME_CLIENTE;CODIGO;EAN;DESCRICAO;LOTE;VENCIMENTO;QTD_ETIQUETAS\n" +
-                         "SYN;CSSK;7891234567890;CREA Sour Morango com Kiwi;GCRMK2408012;02/2027;1\n" +
-                         "OUTRO CLIENTE;XYZ-01;9876543210987;Produto Exemplo 2;LOTEABCDE123;12/2025;5";
+    // O modelo CSV já inclui a coluna QUANTIDADE, o que está correto.
+    const csvContent = "\uFEFFNOME_CLIENTE;CODIGO;EAN;DESCRICAO;LOTE;VENCIMENTO;QUANTIDADE;QTD_ETIQUETAS\n" +
+                       "SYN;CSSK;7891234567890;CREA Sour Morango com Kiwi;GCRMK2408012;02/2027;10 UN;1\n" + // Exemplo COM lote
+                       "OUTRO CLIENTE;XYZ-01;9876543210987;Produto Exemplo 2;;;50 UN;5"; // Exemplo SEM lote
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
@@ -106,7 +151,7 @@ export default function HomePage() {
   
   const generatePDF = async () => {
     if (csvData.length === 0) {
-      setError("Nenhum dado válido para gerar as etiquetas. Verifique o arquivo CSV.");
+      setError("Nenhum dado válido para gerar as etiquetas. Verifique o arquivo CSV e o tipo de etiqueta selecionado.");
       return;
     }
     setLoading(true);
@@ -138,7 +183,11 @@ export default function HomePage() {
 
         try {
             const eanBarcode = await generateBarcodeImage(row.EAN, 8);
-            const loteBarcode = await generateBarcodeImage(row.LOTE, 8);
+            
+            let loteBarcode: string | null = null;
+            if (labelType === 'comLote' && row.LOTE) {
+              loteBarcode = await generateBarcodeImage(row.LOTE, 8);
+            }
 
             for (let i = 0; i < quantity; i++) {
                 if (!isFirstPage) doc.addPage();
@@ -146,7 +195,10 @@ export default function HomePage() {
 
                 const margin = 3;
                 const pageW = doc.internal.pageSize.getWidth();
-                
+                const contentW = pageW - 30; // Largura do campo de conteúdo
+                const contentX = margin + 23; // Posição X do campo de conteúdo
+                const contentCenterX = contentX + (contentW / 2); // Centro X do conteúdo
+
                 doc.setDrawColor(0);
                 doc.rect(1, 1, pageW - 2, 68); 
 
@@ -158,55 +210,96 @@ export default function HomePage() {
                 doc.setFontSize(8); 
                 doc.rect(margin, 9, 22, 7);
                 doc.text("CÓDIGO", margin + 11, 13.5, { align: 'center' });
-                doc.rect(margin + 23, 9, pageW - 30, 7);
+                doc.rect(contentX, 9, contentW, 7);
                 doc.setFontSize(8); 
-                doc.text(row.CODIGO, margin + 23 + (pageW - 30) / 2, 13.5, { align: 'center' });
+                doc.text(row.CODIGO, contentCenterX, 13.5, { align: 'center' });
+                
+                // --- EAN/DUN ---
                 doc.rect(margin, 17, 22, 7);
-                doc.text("EAN", margin + 11, 21.5, { align: 'center' });
-                doc.addImage(eanBarcode, 'PNG', margin + 23, 16.5, pageW - 30, 8);
+                doc.text("EAN/DUN", margin + 11, 21.5, { align: 'center' });
+                doc.addImage(eanBarcode, 'PNG', contentX, 16.5, contentW, 8);
                 
                 // --- DESCRIÇÃO ---
                 doc.setFont("Helvetica", "bold");
                 doc.setFontSize(8);
                 doc.rect(margin, 25, 22, 15);
                 doc.text("DESCRIÇÃO", margin + 11, 33.5, { align: 'center' });
-                doc.rect(margin + 23, 25, pageW - 30, 15);
+                doc.rect(contentX, 25, contentW, 15);
                 doc.setFontSize(8);
                 
-                // 1. Limita a string da descrição para no máximo 132 caracteres
                 const descricaoLimitada = row.DESCRICAO.substring(0, 132);
-
-                // 2. Quebra o texto (já limitado) em linhas que cabem na largura da caixa
                 const descMaxWidth = pageW - 32;
                 const descricaoTexto = doc.splitTextToSize(descricaoLimitada, descMaxWidth);
-
-                // 3. Lógica para centralizar verticalmente
                 const lineHeight = doc.getLineHeight() / doc.internal.scaleFactor;
                 const boxCenterY = 25 + (15 / 2);
                 const startY = boxCenterY - ((descricaoTexto.length - 1) * lineHeight) / 2;
-                const centerX = margin + 23 + (pageW - 30) / 2;
+                
+                doc.text(descricaoTexto, contentCenterX, startY, { align: 'center' });
 
-                // 4. Adiciona o texto ao PDF
-                doc.text(descricaoTexto, centerX, startY, { align: 'center' });
+                // --- BLOCO CONDICIONAL (LOTE/VENC OU QUANTIDADE) ---
+                if (labelType === 'comLote') {
+                    // --- LOTE ---
+                    doc.setFont("Helvetica", "bold");
+                    doc.setFontSize(8); 
+                    doc.rect(margin, 41.5, 22, 15.5);
+                    doc.text("LOTE", margin + 11, 49.5, { align: 'center' });
+                    doc.rect(contentX, 41.5, contentW, 7);
+                    doc.setFontSize(8); 
+                    doc.text(row.LOTE!, contentCenterX, 46, { align: 'center' });
+                    if (loteBarcode) {
+                        doc.addImage(loteBarcode, 'PNG', contentX, 49, contentW, 8);
+                    }
 
-                // --- LOTE ---
-                doc.setFont("Helvetica", "bold");
-                doc.setFontSize(8); 
-                doc.rect(margin, 41.5, 22, 15.5);
-                doc.text("LOTE", margin + 11, 49.5, { align: 'center' });
-                doc.rect(margin + 23, 41.5, pageW - 30, 7);
-                doc.setFontSize(8); 
-                doc.text(row.LOTE, margin + 23 + (pageW - 30) / 2, 46, { align: 'center' });
-                doc.addImage(loteBarcode, 'PNG', margin + 23, 49, pageW - 30, 8);
+                    // === INÍCIO DA ALTERAÇÃO (BLOCO VENCIMENTO + QUANTIDADE) ===
+                    
+                    const boxY = 59;
+                    const boxH = 7;
+                    const textY = 64; // Posição Y do texto
+                    const labelW = 22;
+                    const contentWSmall = (pageW - (margin * 2) - (labelW * 2)) / 2; // (94 - 44) / 2 = 25
+                    const fontS = 12; // Fonte reduzida (era 14)
 
-                // --- VENCIMENTO ---
-                doc.setFont("Helvetica", "bold");
-                doc.setFontSize(8); 
-                doc.rect(margin, 59, 22, 7);
-                doc.text("VENCIMENTO", margin + 11, 63.5, { align: 'center' });
-                doc.setFontSize(14); 
-                doc.rect(margin + 23, 59, pageW - 30, 7);
-                doc.text(row.VENCIMENTO, margin + 23 + (pageW - 30) / 2, 64, { align: 'center' });
+                    // --- VENCIMENTO (Metade Esquerda) ---
+                    doc.setFont("Helvetica", "bold");
+                    doc.setFontSize(8); 
+                    doc.rect(margin, boxY, labelW, boxH);
+                    doc.text("VENCIMENTO", margin + labelW / 2, 63.5, { align: 'center' });
+                    
+                    doc.setFontSize(fontS); 
+                    doc.rect(margin + labelW, boxY, contentWSmall, boxH);
+                    doc.text(row.VENCIMENTO!, margin + labelW + (contentWSmall / 2), textY, { align: 'center' });
+
+                    // --- QUANTIDADE (Metade Direita) ---
+                    const vencXEnd = margin + labelW + contentWSmall; // Ponto X onde termina o vencimento
+                    
+                    doc.setFont("Helvetica", "bold");
+                    doc.setFontSize(8);
+                    doc.rect(vencXEnd, boxY, labelW, boxH);
+                    doc.text("QUANTIDADE", vencXEnd + labelW / 2, 63.5, { align: 'center' });
+
+                    doc.setFontSize(fontS);
+                    doc.rect(vencXEnd + labelW, boxY, contentWSmall, boxH);
+                    doc.text(row.QUANTIDADE!, vencXEnd + labelW + (contentWSmall / 2), textY, { align: 'center' });
+
+                    // === FIM DA ALTERAÇÃO ===
+
+                } else {
+                    // --- QUANTIDADE (Layout 'semLote') ---
+                    // Ocupa o espaço combinado de LOTE e VENCIMENTO
+                    const qtyBoxY = 41.5;
+                    const qtyBoxHeight = 24.5; // (59 + 7) - 41.5
+                    const qtyBoxCenterY = qtyBoxY + (qtyBoxHeight / 2);
+
+                    doc.setFont("Helvetica", "bold");
+                    doc.setFontSize(8); 
+                    doc.rect(margin, qtyBoxY, 22, qtyBoxHeight);
+                    doc.text("QUANTIDADE", margin + 11, qtyBoxCenterY, { align: 'center' });
+                    
+                    doc.rect(contentX, qtyBoxY, contentW, qtyBoxHeight);
+                    doc.setFontSize(22); // Fonte maior para destacar a quantidade
+                    doc.setFont("Helvetica", "bold");
+                    doc.text(row.QUANTIDADE!, contentCenterX, qtyBoxCenterY + 3.5, { align: 'center' });
+                }
             }
         } catch (e) {
             const errorMessage = e instanceof Error ? e.message : String(e);
@@ -224,11 +317,45 @@ export default function HomePage() {
     <div className="bg-gray-900 min-h-screen flex flex-col items-center justify-center p-4 text-gray-100">
         <div className="w-full max-w-lg bg-gray-800 rounded-2xl shadow-xl p-8 space-y-6">
             <div className='text-center'>
-              <img src="/logo.png" alt="Logo da sua Empresa" className="w-40 mx-auto mb-4" />
+                <img src="/logo.png" alt="Logo da sua Empresa" className="w-40 mx-auto mb-4" />
                 <h1 className="text-3xl font-bold text-white">Gerador de Etiquetas</h1>
                 <p className="text-gray-400 mt-2">Importe um arquivo CSV para criar suas etiquetas.</p>
                 {!scriptsLoaded && !error && <p className="text-yellow-400 text-sm mt-2">Carregando dependências...</p>}
             </div>
+
+            {/* --- 1. SELETOR DE TIPO DE ETIQUETA (ESTILO TOGGLE) --- */}
+            <div className="space-y-3">
+              <p className="text-sm font-medium text-gray-300">1. Escolha o tipo de etiqueta:</p>
+              
+              <div className="flex w-full rounded-lg bg-gray-700 p-1">
+                <button
+                  type="button"
+                  onClick={() => handleLabelTypeChange('comLote')}
+                  className={`
+                    w-1/2 rounded-md py-2 text-center text-sm font-semibold transition-all duration-200
+                    ${labelType === 'comLote' 
+                      ? 'bg-emerald-600 text-white shadow-sm' // Estado Ativo
+                      : 'text-gray-300 hover:bg-gray-600/50 hover:text-white'} // Estado Inativo
+                  `}
+                >
+                  Com Lote e Vencimento
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleLabelTypeChange('semLote')}
+                  className={`
+                    w-1/2 rounded-md py-2 text-center text-sm font-semibold transition-all duration-200
+                    ${labelType === 'semLote' 
+                      ? 'bg-emerald-600 text-white shadow-sm' // Estado Ativo
+                      : 'text-gray-300 hover:bg-gray-600/50 hover:text-white'} // Estado Inativo
+                  `}
+                >
+                  Sem Lote (com Quantidade)
+                </button>
+              </div>
+
+            </div>
+
 
             {error && (
                 <div className="bg-red-500/20 border border-red-500 text-red-300 px-4 py-3 rounded-lg text-sm">
@@ -236,7 +363,15 @@ export default function HomePage() {
                 </div>
             )}
             
+            {/* --- 2. UPLOAD E BOTÕES --- */}
             <div className="space-y-4">
+                <p className="text-sm font-medium text-gray-300">2. Faça o upload do arquivo:</p>
+                <p className='text-xs text-gray-400 -mt-2'>
+                  {labelType === 'comLote' 
+                    ? 'O modo "Com Lote" requer as colunas: LOTE, VENCIMENTO e QUANTIDADE.'
+                    : 'O modo "Sem Lote" requer a coluna: QUANTIDADE.'
+                  }
+                </p>
                 <label htmlFor="file-upload" className={`w-full cursor-pointer bg-gray-700 hover:bg-gray-600 transition-colors text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center ${!scriptsLoaded ? 'opacity-50 cursor-not-allowed' : ''}`}>
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
@@ -250,10 +385,10 @@ export default function HomePage() {
                         onClick={downloadTemplate} 
                         className="w-full bg-sky-600 hover:bg-sky-500 text-white font-bold py-3 px-4 rounded-lg transition-colors duration-300 flex items-center justify-center"
                     >
-                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                             <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                         </svg>
-                         Baixar Modelo
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                        </svg>
+                        Baixar Modelo
                     </button>
 
                     <button 
