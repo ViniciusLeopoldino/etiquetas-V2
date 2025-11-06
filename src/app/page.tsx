@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
+import Image from 'next/image'; // <-- 2. ADICIONADO AQUI
 
 // Declara as bibliotecas no escopo global para o TypeScript
 declare global {
@@ -82,15 +83,16 @@ export default function HomePage() {
         delimiter: ";",
         complete: (results: any) => {
           
-          // === INÍCIO DA ALTERAÇÃO (VALIDAÇÃO) ===
+          // === 1. CORREÇÃO AQUI ===
           // Colunas básicas + Quantidade são sempre necessárias
-          let requiredColumns = ['NOME_CLIENTE', 'CODIGO', 'EAN', 'DESCRICAO', 'QUANTIDADE'];
+          // Trocado 'let' por 'const'
+          const requiredColumns = ['NOME_CLIENTE', 'CODIGO', 'EAN', 'DESCRICAO', 'QUANTIDADE'];
           
-          // Adiciona colunas específicas do tipo "Com Lote"
+          // Adiciona colunas específicas do tipo "Com Lote" (isso é permitido com const)
           if (labelType === 'comLote') {
             requiredColumns.push('LOTE', 'VENCIMENTO');
           }
-          // === FIM DA ALTERAÇÃO (VALIDAÇÃO) ===
+          // === FIM DA CORREÇÃO 1 ===
 
           const fileColumns = results.meta.fields || [];
           const missingColumns = requiredColumns.filter(col => !fileColumns.includes(col));
@@ -102,20 +104,16 @@ export default function HomePage() {
             return;
           }
 
-          // === INÍCIO DA ALTERAÇÃO (FILTRAGEM) ===
+          // Filtragem de dados
           const filteredData = results.data.filter((row: CsvRow) => {
-            // Quantidade agora é obrigatória em ambos
             const commonValid = row.NOME_CLIENTE && row.CODIGO && row.EAN && row.DESCRICAO && row.QUANTIDADE;
             
             if (labelType === 'comLote') {
-              // Modo "Com Lote" também precisa de Lote e Vencimento
               return commonValid && row.LOTE && row.VENCIMENTO;
             } else {
-              // Modo "Sem Lote" só precisa dos comuns
               return commonValid;
             }
           });
-          // === FIM DA ALTERAÇÃO (FILTRAGEM) ===
 
 
           if (filteredData.length === 0) {
@@ -135,10 +133,9 @@ export default function HomePage() {
   };
 
   const downloadTemplate = () => {
-    // O modelo CSV já inclui a coluna QUANTIDADE, o que está correto.
     const csvContent = "\uFEFFNOME_CLIENTE;CODIGO;EAN;DESCRICAO;LOTE;VENCIMENTO;QUANTIDADE;QTD_ETIQUETAS\n" +
-                       "SYN;CSSK;7891234567890;CREA Sour Morango com Kiwi;GCRMK2408012;02/2027;10 UN;1\n" + // Exemplo COM lote
-                       "OUTRO CLIENTE;XYZ-01;9876543210987;Produto Exemplo 2;;;50 UN;5"; // Exemplo SEM lote
+                       "SYN;CSSK;7891234567890;CREA Sour Morango com Kiwi;GCRMK2408012;02/2027;10 UN;1\n" + 
+                       "OUTRO CLIENTE;XYZ-01;9876543210987;Produto Exemplo 2;;;50 UN;5";
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
@@ -160,7 +157,7 @@ export default function HomePage() {
     const doc = new window.jspdf.jsPDF({
       orientation: 'landscape',
       unit: 'mm',
-      format: [100, 70], // Tamanho 10x7 cm
+      format: [100, 70], 
     });
 
     const generateBarcodeImage = (text: string, height: number): Promise<string> => {
@@ -195,9 +192,9 @@ export default function HomePage() {
 
                 const margin = 3;
                 const pageW = doc.internal.pageSize.getWidth();
-                const contentW = pageW - 30; // Largura do campo de conteúdo
-                const contentX = margin + 23; // Posição X do campo de conteúdo
-                const contentCenterX = contentX + (contentW / 2); // Centro X do conteúdo
+                const contentW = pageW - 30; 
+                const contentX = margin + 23; 
+                const contentCenterX = contentX + (contentW / 2); 
 
                 doc.setDrawColor(0);
                 doc.rect(1, 1, pageW - 2, 68); 
@@ -236,7 +233,7 @@ export default function HomePage() {
                 
                 doc.text(descricaoTexto, contentCenterX, startY, { align: 'center' });
 
-                // --- BLOCO CONDICIONAL (LOTE/VENC OU QUANTIDADE) ---
+                // --- BLOCO CONDICIONAL ---
                 if (labelType === 'comLote') {
                     // --- LOTE ---
                     doc.setFont("Helvetica", "bold");
@@ -250,14 +247,13 @@ export default function HomePage() {
                         doc.addImage(loteBarcode, 'PNG', contentX, 49, contentW, 8);
                     }
 
-                    // === INÍCIO DA ALTERAÇÃO (BLOCO VENCIMENTO + QUANTIDADE) ===
-                    
+                    // --- BLOCO VENCIMENTO + QUANTIDADE ---
                     const boxY = 59;
                     const boxH = 7;
-                    const textY = 64; // Posição Y do texto
+                    const textY = 64; 
                     const labelW = 22;
                     const contentWSmall = (pageW - (margin * 2) - (labelW * 2)) / 2; // (94 - 44) / 2 = 25
-                    const fontS = 12; // Fonte reduzida (era 14)
+                    const fontS = 12; 
 
                     // --- VENCIMENTO (Metade Esquerda) ---
                     doc.setFont("Helvetica", "bold");
@@ -270,7 +266,7 @@ export default function HomePage() {
                     doc.text(row.VENCIMENTO!, margin + labelW + (contentWSmall / 2), textY, { align: 'center' });
 
                     // --- QUANTIDADE (Metade Direita) ---
-                    const vencXEnd = margin + labelW + contentWSmall; // Ponto X onde termina o vencimento
+                    const vencXEnd = margin + labelW + contentWSmall; 
                     
                     doc.setFont("Helvetica", "bold");
                     doc.setFontSize(8);
@@ -281,13 +277,10 @@ export default function HomePage() {
                     doc.rect(vencXEnd + labelW, boxY, contentWSmall, boxH);
                     doc.text(row.QUANTIDADE!, vencXEnd + labelW + (contentWSmall / 2), textY, { align: 'center' });
 
-                    // === FIM DA ALTERAÇÃO ===
-
                 } else {
                     // --- QUANTIDADE (Layout 'semLote') ---
-                    // Ocupa o espaço combinado de LOTE e VENCIMENTO
                     const qtyBoxY = 41.5;
-                    const qtyBoxHeight = 24.5; // (59 + 7) - 41.5
+                    const qtyBoxHeight = 24.5; 
                     const qtyBoxCenterY = qtyBoxY + (qtyBoxHeight / 2);
 
                     doc.setFont("Helvetica", "bold");
@@ -296,7 +289,7 @@ export default function HomePage() {
                     doc.text("QUANTIDADE", margin + 11, qtyBoxCenterY, { align: 'center' });
                     
                     doc.rect(contentX, qtyBoxY, contentW, qtyBoxHeight);
-                    doc.setFontSize(22); // Fonte maior para destacar a quantidade
+                    doc.setFontSize(22); 
                     doc.setFont("Helvetica", "bold");
                     doc.text(row.QUANTIDADE!, contentCenterX, qtyBoxCenterY + 3.5, { align: 'center' });
                 }
@@ -317,13 +310,23 @@ export default function HomePage() {
     <div className="bg-gray-900 min-h-screen flex flex-col items-center justify-center p-4 text-gray-100">
         <div className="w-full max-w-lg bg-gray-800 rounded-2xl shadow-xl p-8 space-y-6">
             <div className='text-center'>
-                <img src="/logo.png" alt="Logo da sua Empresa" className="w-40 mx-auto mb-4" />
+                
+                {/* === 2. CORREÇÃO AQUI === */}
+                <Image
+                  src="/logo.png"
+                  alt="Logo da sua Empresa"
+                  width={160}  // 10rem = 160px (w-40)
+                  height={160} // Um valor padrão, o 'h-auto' vai ajustar
+                  className="w-40 h-auto mx-auto mb-4" // Adicionado h-auto
+                />
+                {/* === FIM DA CORREÇÃO 2 === */}
+
                 <h1 className="text-3xl font-bold text-white">Gerador de Etiquetas</h1>
                 <p className="text-gray-400 mt-2">Importe um arquivo CSV para criar suas etiquetas.</p>
                 {!scriptsLoaded && !error && <p className="text-yellow-400 text-sm mt-2">Carregando dependências...</p>}
             </div>
 
-            {/* --- 1. SELETOR DE TIPO DE ETIQUETA (ESTILO TOGGLE) --- */}
+            {/* --- 1. SELETOR DE TIPO DE ETIQUETA --- */}
             <div className="space-y-3">
               <p className="text-sm font-medium text-gray-300">1. Escolha o tipo de etiqueta:</p>
               
@@ -334,8 +337,8 @@ export default function HomePage() {
                   className={`
                     w-1/2 rounded-md py-2 text-center text-sm font-semibold transition-all duration-200
                     ${labelType === 'comLote' 
-                      ? 'bg-emerald-600 text-white shadow-sm' // Estado Ativo
-                      : 'text-gray-300 hover:bg-gray-600/50 hover:text-white'} // Estado Inativo
+                      ? 'bg-emerald-600 text-white shadow-sm' 
+                      : 'text-gray-300 hover:bg-gray-600/50 hover:text-white'}
                   `}
                 >
                   Com Lote e Vencimento
@@ -346,8 +349,8 @@ export default function HomePage() {
                   className={`
                     w-1/2 rounded-md py-2 text-center text-sm font-semibold transition-all duration-200
                     ${labelType === 'semLote' 
-                      ? 'bg-emerald-600 text-white shadow-sm' // Estado Ativo
-                      : 'text-gray-300 hover:bg-gray-600/50 hover:text-white'} // Estado Inativo
+                      ? 'bg-emerald-600 text-white shadow-sm' 
+                      : 'text-gray-300 hover:bg-gray-600/50 hover:text-white'}
                   `}
                 >
                   Sem Lote (com Quantidade)
