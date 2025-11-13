@@ -83,16 +83,11 @@ export default function HomePage() {
         delimiter: ";",
         complete: (results: any) => {
           
-          // === 1. CORREÇÃO AQUI ===
-          // Colunas básicas + Quantidade são sempre necessárias
-          // Trocado 'let' por 'const'
           const requiredColumns = ['NOME_CLIENTE', 'CODIGO', 'EAN', 'DESCRICAO', 'QUANTIDADE'];
           
-          // Adiciona colunas específicas do tipo "Com Lote" (isso é permitido com const)
           if (labelType === 'comLote') {
             requiredColumns.push('LOTE', 'VENCIMENTO');
           }
-          // === FIM DA CORREÇÃO 1 ===
 
           const fileColumns = results.meta.fields || [];
           const missingColumns = requiredColumns.filter(col => !fileColumns.includes(col));
@@ -208,10 +203,11 @@ export default function HomePage() {
                 doc.rect(margin, 9, 22, 7);
                 doc.text("CÓDIGO", margin + 11, 13.5, { align: 'center' });
                 doc.rect(contentX, 9, contentW, 7);
-                doc.setFontSize(8); 
+                doc.setFontSize(12); 
                 doc.text(row.CODIGO, contentCenterX, 13.5, { align: 'center' });
                 
                 // --- EAN/DUN ---
+                doc.setFontSize(8);
                 doc.rect(margin, 17, 22, 7);
                 doc.text("EAN/DUN", margin + 11, 21.5, { align: 'center' });
                 doc.addImage(eanBarcode, 'PNG', contentX, 16.5, contentW, 8);
@@ -241,7 +237,7 @@ export default function HomePage() {
                     doc.rect(margin, 41.5, 22, 15.5);
                     doc.text("LOTE", margin + 11, 49.5, { align: 'center' });
                     doc.rect(contentX, 41.5, contentW, 7);
-                    doc.setFontSize(8); 
+                    doc.setFontSize(12); 
                     doc.text(row.LOTE!, contentCenterX, 46, { align: 'center' });
                     if (loteBarcode) {
                         doc.addImage(loteBarcode, 'PNG', contentX, 49, contentW, 8);
